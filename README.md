@@ -1,2 +1,2 @@
 # ICE-tutor
-AI-powered Indian Competitive Exam Tutor app using GPT, RAG, Vector DB, OCR
+ICE Tutor is a personalized AI-powered learning assistant for Indian competitive exams like NEET and JEE. It uses GPT-based reasoning, RAG (Retrieval-Augmented Generation), vector search, and OCR (coming soon) to help students understand concepts, solve numerical problems, and study smarter—starting with Physics and expanding to Chemistry, Biology, and Math.
