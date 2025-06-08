@@ -117,7 +117,7 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
     skip_exact_lines = {"Chapter", "Page", "Exercise", "Figure", "Reprint"}
     skip_regex_patterns = [
         re.compile(r'^\s*Page\s+\d+'),           # Matches: Page 2, Page 15
-        re.compile(r'^\s*Figure\s+\d+'),         # Matches: Figure 1, etc.
+        re.compile(r'^\s*FIGURE\s+\d+'),         # Matches: Figure 1, etc.
         # re.compile(r'^\s*Example\s+\d+'),      # Matches: Example 2, etc.
         re.compile(r'^\s*Reprint\s+\d+'),
         re.compile(r'^\s*[\d]+\s*$'),            # Matches lines with just numbers (page numbers)
@@ -229,41 +229,68 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
                 current_subsection = sub_match.group(1)
                 current_subsection_title = sub_match.group(2)
 
-                span_info = None
-                subsection_title_text = None
-                subsection_title_font_size = None
-                subsection_title_font_name = None
-                subsection_title_font_case = None
-                subsection_title_is_bold = None
-                subsection_title_is_italic = None
-                subsection_title_font_color = None
+                # span_info = None
+                # subsection_text = None
+                # subsection_font_size = None
+                # subsection_font_name = None
+                # subsection_font_case = None
+                # subsection_is_bold = None
+                # subsection_is_italic = None
+                # subsection_font_color = None
 
                 props = line_property(line)  # Call your function here
 
                 if props:
                     span_info = props[0]
-                    subsection_title_text = span_info["text"]
-                    subsection_title_font_size = span_info["font_size"]
-                    subsection_title_font_name = span_info["font_name"]
-                    subsection_title_font_case = span_info["font_case"]
-                    subsection_title_is_bold = span_info["is_bold"]
-                    subsection_title_is_italic = span_info["is_italic"]
-                    subsection_title_font_color = span_info["font_color"]
+                    subsection_text = span_info["text"]
+                    subsection_font_size = span_info["font_size"]
+                    subsection_font_name = span_info["font_name"]
+                    subsection_font_case = span_info["font_case"]
+                    subsection_is_bold = span_info["is_bold"]
+                    subsection_is_italic = span_info["is_italic"]
+                    subsection_font_color = span_info["font_color"]
 
-                # print(subsection_title_text) 
-                # print(subsection_title_font_size) 
-                # print(subsection_title_font_name)    
-                # print(subsection_title_font_case) 
-                # print(subsection_title_is_bold) 
-                # print(subsection_title_is_italic) 
-                # print(subsection_title_font_color)
+                # print(subsection_text) 
+                # print(subsection_font_size) 
+                # print(subsection_font_name)    
+                # print(subsection_font_case) 
+                # print(subsection_is_bold) 
+                # print(subsection_is_italic) 
+                # print(subsection_font_color)
 
                 current_text = " ".join(span["text"] for span in line["spans"]).strip()
                 print("Current line:", current_text)
                 remaining_lines = all_lines[idx + 1: idx + 6]
-                for r_line in remaining_lines:
-                    r_text = " ".join(span["text"] for span in r_line["spans"])
-                    print("Subsection Remaining lines:", r_text)
+                k = 0
+                for subr_line in remaining_lines:
+                    subr_text = " ".join(span["text"] for span in subr_line["spans"])
+                    print("Subsection Remaining lines:", subr_text)
+                    sub_props_remain = line_property(subr_line)
+                    if sub_props_remain:
+                        for i, sub_span_info in enumerate(sub_props_remain):
+                            i+=1
+                            # sub_span_info = props_remain[0]
+                            if subsection_font_name == sub_span_info["font_name"] and subsection_font_color == sub_span_info["font_color"]:
+                                line_consumed+=1
+                                if k == 1 and sub_span_info["font_size"] == 16:
+                                    letter = sub_span_info["text"]
+                                elif k == 2:
+                                    k=0
+                                    if sub_span_info["font_size"] < 16:
+                                        line_consumed-=1
+                                        letter = letter + sub_span_info["text"]
+                                        # print("letter: ", letter)
+                                        print("current_section1: ", current_section_title)
+                                        current_section_title = " ".join([current_section_title, letter])
+                                        print("current_section2: ", current_section_title)
+                                    else: 
+                                        word = " ".join([letter, sub_span_info["text"]])
+                                        print("current_section1: ", current_section_title)
+                                        current_section_title = " ".join([current_section_title, letter])
+                                        print("current_section2: ", current_section_title)
+                            else:
+                                break
+                    break
 
                 continue
 
@@ -288,14 +315,14 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
                 current_subsection = None
                 current_subsection_title = None
 
-                span_info = None
-                section_title_text = None
-                section_title_font_size = None
-                section_title_font_name = None
-                section_title_font_case = None
-                section_title_is_bold = None
-                section_title_is_italic = None
-                section_title_font_color = None
+                # span_info = None
+                # section_title_text = None
+                # section_title_font_size = None
+                # section_title_font_name = None
+                # section_title_font_case = None
+                # section_title_is_bold = None
+                # section_title_is_italic = None
+                # section_title_font_color = None
 
                 props = line_property(line)  # Call your function here
 
