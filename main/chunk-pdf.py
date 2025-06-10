@@ -16,15 +16,6 @@ os.makedirs(output_image, exist_ok=True)
 os.makedirs(output_json, exist_ok=True)
 
 def reconstruct_line_text(line, spacing_threshold=1.5):
-    """
-    Reconstruct text in a line by merging characters that are close horizontally,
-    fixing issues like 'I NTRODUCTION' to 'INTRODUCTION'.
-    
-    line: a line dict from PyMuPDF page dict ["lines"] list
-    spacing_threshold: float, max gap between characters to be considered same word
-    
-    Returns: string - reconstructed line text
-    """
     words = []
     current_word = ""
     prev_x1 = None  # track right bound of previous character/span
@@ -114,10 +105,11 @@ def line_property(line):
 
 def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
     chapter_pattern = re.compile(r'^\s*Chapter\s+(.*)', re.IGNORECASE)
-    skip_exact_lines = {"Chapter", "Page", "Exercise", "Figure", "Reprint"}
+    skip_exact_lines = {"Chapter", "Page", "Exercise", "Figure", "Reprint", "Fig"}
     skip_regex_patterns = [
         re.compile(r'^\s*Page\s+\d+'),           # Matches: Page 2, Page 15
         re.compile(r'^\s*FIGURE\s+\d+'),         # Matches: Figure 1, etc.
+        re.compile(r'^\s*Fig\s+\d+'),  
         # re.compile(r'^\s*Example\s+\d+'),      # Matches: Example 2, etc.
         re.compile(r'^\s*Reprint\s+\d+'),
         re.compile(r'^\s*[\d]+\s*$'),            # Matches lines with just numbers (page numbers)
@@ -135,6 +127,10 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
     current_section_title = None
     current_subsection = None
     current_subsection_title = None
+    prev_section = None
+    prev_subsection = None
+    para=1
+    prev_indent_x = None
 
     logging.basicConfig(
         filename=log_path,                # Name of log file
@@ -143,8 +139,8 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
         level=logging.INFO               # Set to INFO to capture general messages
     )
 
-    for page_index, page in enumerate(doc):
-        if page_index >= 4:
+    for page_index, page in enumerate(doc, start=1):
+        if page_index == 11:
             break
 
         # if page_index != 3:
@@ -220,6 +216,7 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
                         "section_title": current_section_title,
                         "subsection": current_subsection,
                         "subsection_title": current_subsection_title,
+                        "paragraph": str(para),
                         # "content": "\n".join(buffer).strip(),
                         "content": " ".join(buffer).strip(),
                         # "images": image_refs.copy()
@@ -259,12 +256,12 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
                 # print(subsection_font_color)
 
                 current_text = " ".join(span["text"] for span in line["spans"]).strip()
-                print("Current line:", current_text)
+                # print("Current line:", current_text)
                 remaining_lines = all_lines[idx + 1: idx + 6]
                 k = 0
                 for subr_line in remaining_lines:
                     subr_text = " ".join(span["text"] for span in subr_line["spans"])
-                    print("Subsection Remaining lines:", subr_text)
+                    # print("Subsection Remaining lines:", subr_text)
                     sub_props_remain = line_property(subr_line)
                     if sub_props_remain:
                         for i, sub_span_info in enumerate(sub_props_remain):
@@ -280,14 +277,14 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
                                         line_consumed-=1
                                         letter = letter + sub_span_info["text"]
                                         # print("letter: ", letter)
-                                        print("current_section1: ", current_section_title)
+                                        # print("current_section1: ", current_section_title)
                                         current_section_title = " ".join([current_section_title, letter])
-                                        print("current_section2: ", current_section_title)
+                                        # print("current_section2: ", current_section_title)
                                     else: 
                                         word = " ".join([letter, sub_span_info["text"]])
-                                        print("current_section1: ", current_section_title)
+                                        # print("current_section1: ", current_section_title)
                                         current_section_title = " ".join([current_section_title, letter])
-                                        print("current_section2: ", current_section_title)
+                                        # print("current_section2: ", current_section_title)
                             else:
                                 break
                     break
@@ -303,12 +300,13 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
                         "section_title": current_section_title,
                         "subsection": current_subsection,
                         "subsection_title": current_subsection_title,
+                        "paragraph": str(para),
                         # "content": "\n".join(buffer).strip(),
                         "content": " ".join(buffer).strip(),
                         # "images": image_refs.copy()
                     })
                     buffer = []
-
+                
                 current_section = sec_match.group(1)
                 current_section_title = sec_match.group(2)
                 # print("current_section1: ", current_section_title)
@@ -345,12 +343,12 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
                 # print(section_font_color)
                 
                 current_text = " ".join(span["text"] for span in line["spans"]).strip()
-                print("Current line:", current_text)
+                # print("Current line:", current_text)
                 remaining_lines = all_lines[idx + 1: idx + 6]
                 k = 0
                 for r_line in remaining_lines:
                     r_text = " ".join(span["text"] for span in r_line["spans"])
-                    print("Section Remaining lines:", r_text)
+                    # print("Section Remaining lines:", r_text)
                     props_remain = line_property(r_line)
                     if props_remain:
                         for i, span_info in enumerate(props_remain):
@@ -367,25 +365,62 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
                                         line_consumed-=1
                                         letter = letter + span_info["text"]
                                         # print("letter: ", letter)
-                                        print("current_section1: ", current_section_title)
+                                        # print("current_section1: ", current_section_title)
                                         current_section_title = " ".join([current_section_title, letter])
-                                        print("current_section2: ", current_section_title)
+                                        # print("current_section2: ", current_section_title)
                                     else: 
                                         word = " ".join([letter, span_info["text"]])
-                                        print("current_section1: ", current_section_title)
+                                        # print("current_section1: ", current_section_title)
                                         current_section_title = " ".join([current_section_title, letter])
-                                        print("current_section2: ", current_section_title)
+                                        # print("current_section2: ", current_section_title)
                             else:
                                 break
                     break
                 continue
 
-            # print("line_consumed1:", line_consumed)
             if line_consumed == 0: 
-                buffer.append(line_text)
+                current_indent_x = line["spans"][0]["bbox"][0] if line.get("spans") else None
+                first_word = line_text.split()[0] if line_text.split() else ""
+                is_first_word_capital = first_word.istitle() 
+                is_indent_break = (prev_indent_x is not None and current_indent_x is not None 
+                                   and (current_indent_x - prev_indent_x) > 10
+                )
+                is_capital_paragraph_start = (is_first_word_capital and
+                                              (len(buffer) > 0 and buffer[-1][-1] in '.!?')  # previous sentence ended
+                )
+
+                if is_indent_break and is_capital_paragraph_start: 
+                    if buffer: 
+                        structured_content.append({
+                            "chapter": current_chapter,
+                            "chapter_title": current_chapter_title,
+                            "section": current_section,
+                            "section_title": current_section_title,
+                            "subsection": current_subsection,
+                            "subsection_title": current_subsection_title,
+                            "paragraph": str(para),
+                            "content": " ".join(buffer).strip(),
+                            # "images": image_refs.copy()
+                        })
+                        buffer = []
+                        buffer.append(line_text)
+                        print("paragraph_buffer: ", buffer)
+                        
+                        if current_section == prev_section and current_subsection == prev_subsection:
+                            para+=1
+                        else:
+                            para=1
+
+                        prev_section = current_section
+                        prev_subsection = prev_subsection
+                else:
+                    buffer.append(line_text)
+
+                prev_indent_x = current_indent_x
             else:
                 line_consumed-=1
-    if buffer:
+    
+    if buffer: 
         structured_content.append({
             "chapter": current_chapter,
             "chapter_title": current_chapter_title,
@@ -393,7 +428,7 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
             "section_title": current_section_title,
             "subsection": current_subsection,
             "subsection_title": current_subsection_title,
-            # "content": "\n".join(buffer).strip(),
+            "paragraph": str(para),
             "content": " ".join(buffer).strip(),
             # "images": image_refs.copy()
         })
