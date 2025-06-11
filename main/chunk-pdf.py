@@ -5,7 +5,8 @@ import json
 import logging
 import datetime
 from datetime import datetime, date, time, timedelta
-
+import pytesseract
+from PIL import Image
 
 pdf_path = "/home/aahmad/Desktop/DEV/working-dir/leph101.pdf"
 output_image = "/home/aahmad/Desktop/DEV/output/images/"
@@ -14,6 +15,26 @@ log_path= "/home/aahmad/Desktop/DEV/output/chunk-pdf-py.log"
 
 os.makedirs(output_image, exist_ok=True)
 os.makedirs(output_json, exist_ok=True)
+
+def is_math_span(span):
+    # print("begin print")
+    # math_symbols = ['ε', 'π', '^', '=', '/', '|']
+    math_symbols = ['π', '^', '=', '/', '|', 'ε', '∑', '√', '∫', 'µ']
+    # return any(sym in span['text'] for sym in math_symbols)
+    text = span.get('text', '')
+    matched_symbols = [sym for sym in math_symbols if sym in text]
+
+    if matched_symbols:
+        print(f"🔍 Matched symbols: {matched_symbols} in span text: \"{text}\"")
+
+    return bool(matched_symbols)
+
+def merge_bboxes(spans):
+    x0 = min(s['bbox'][0] for s in spans)
+    y0 = min(s['bbox'][1] for s in spans)
+    x1 = max(s['bbox'][2] for s in spans)
+    y1 = max(s['bbox'][3] for s in spans)
+    return fitz.Rect(x0 - 2, y0 - 2, x1 + 2, y1 + 2)
 
 def reconstruct_line_text(line, spacing_threshold=1.5):
     words = []
@@ -129,8 +150,8 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
     current_subsection_title = None
     prev_section = None
     prev_subsection = None
-    para=1
     prev_indent_x = None
+    math_image_counter = 0
 
     logging.basicConfig(
         filename=log_path,                # Name of log file
@@ -139,16 +160,17 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
         level=logging.INFO               # Set to INFO to capture general messages
     )
 
-    for page_index, page in enumerate(doc, start=1):
-        if page_index == 11:
-            break
+    for page_num, page in enumerate(doc, start=1):
+        # if page_num == 5:
+        #     break
 
-        # if page_index != 3:
+        # if page_num != 3:
         #     continue
 
-        # logging.info("page_index:" + str(page_index))
+        # logging.info("page_num:" + str(page_num))
         page_dict = page.get_text("dict")
-        page_images = page.get_images(full=True)
+        # page_images = page.get_images(full=True)
+        # formula_spans = []
 
         # image_refs = []
         # for img_index, img in enumerate(page_images):
@@ -157,7 +179,7 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
         #     image_bytes = base_image["image"]
         #     image_ext = base_image["ext"]
         #
-        #     image_filename = f"page{page_index+1}_img{img_index+1}.{image_ext}"
+        #     image_filename = f"page{page_num+1}_img{img_index+1}.{image_ext}"
         #     image_path = os.path.join(output_image, image_filename)
         #     with open(image_path, "wb") as f:
         #         f.write(image_bytes)
@@ -176,8 +198,34 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
 
         line_consumed = 0
         for idx, line in enumerate(all_lines):
-            line_text = reconstruct_line_text(line).strip()
-            # logging.info(f"page_index: {page_index}, line_index: {line_counter}, text: {line_text}")
+            # line_text = reconstruct_line_text(line).strip()
+            formula_spans = [] 
+            line_text_parts = []
+            math_exist = False
+            # print(" ".join([span["text"] for span in line["spans"]]))
+                       
+            for span in line.get("spans", []):
+                if is_math_span(span):
+                    math_exist = True
+                    math_image_counter+=1
+                    formula_spans.append(span)
+                    formula_rect = merge_bboxes(formula_spans)
+                    pix = page.get_pixmap(clip=formula_rect, dpi=300)
+                    image_filename = f"math_image{math_image_counter}.png"
+                    line_text_parts.append(f"<{image_filename}>")
+                    image_path = os.path.join(output_image, image_filename)
+                    pix.save(image_path)
+                else:
+                    line_text_parts.append(span["text"])
+                
+            if math_exist:                
+                line_text = " ".join(line_text_parts).strip()
+                line_text_parts = []
+            else:
+                line_text = reconstruct_line_text(line).strip()
+
+            # print("line_text", line_text)
+            # logging.info(f"page_num: {page_num}, line_index: {line_counter}, text: {line_text}")
 
             line_counter += 1
             if not line_text:
@@ -225,15 +273,8 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
 
                 current_subsection = sub_match.group(1)
                 current_subsection_title = sub_match.group(2)
-
-                # span_info = None
-                # subsection_text = None
-                # subsection_font_size = None
-                # subsection_font_name = None
-                # subsection_font_case = None
-                # subsection_is_bold = None
-                # subsection_is_italic = None
-                # subsection_font_color = None
+                prev_subsection = current_subsection
+                para=1
 
                 props = line_property(line)  # Call your function here
 
@@ -246,14 +287,6 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
                     subsection_is_bold = span_info["is_bold"]
                     subsection_is_italic = span_info["is_italic"]
                     subsection_font_color = span_info["font_color"]
-
-                # print(subsection_text) 
-                # print(subsection_font_size) 
-                # print(subsection_font_name)    
-                # print(subsection_font_case) 
-                # print(subsection_is_bold) 
-                # print(subsection_is_italic) 
-                # print(subsection_font_color)
 
                 current_text = " ".join(span["text"] for span in line["spans"]).strip()
                 # print("Current line:", current_text)
@@ -309,19 +342,12 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
                 
                 current_section = sec_match.group(1)
                 current_section_title = sec_match.group(2)
-                # print("current_section1: ", current_section_title)
+                prev_section = current_section
                 current_subsection = None
+                prev_subsection = None
                 current_subsection_title = None
-
-                # span_info = None
-                # section_title_text = None
-                # section_title_font_size = None
-                # section_title_font_name = None
-                # section_title_font_case = None
-                # section_title_is_bold = None
-                # section_title_is_italic = None
-                # section_title_font_color = None
-
+                para=1
+                
                 props = line_property(line)  # Call your function here
 
                 if props:
@@ -334,14 +360,6 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
                     section_is_italic = span_info["is_italic"]
                     section_font_color = span_info["font_color"]
 
-                # print(section_text) 
-                # print(section_font_size) 
-                # print(section_font_name)    
-                # print(section_font_case) 
-                # print(section_is_bold) 
-                # print(section_is_italic) 
-                # print(section_font_color)
-                
                 current_text = " ".join(span["text"] for span in line["spans"]).strip()
                 # print("Current line:", current_text)
                 remaining_lines = all_lines[idx + 1: idx + 6]
@@ -381,12 +399,14 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
             if line_consumed == 0: 
                 current_indent_x = line["spans"][0]["bbox"][0] if line.get("spans") else None
                 first_word = line_text.split()[0] if line_text.split() else ""
+                word_count = len(" ".join(buffer).strip().split())
                 is_first_word_capital = first_word.istitle() 
                 is_indent_break = (prev_indent_x is not None and current_indent_x is not None 
                                    and (current_indent_x - prev_indent_x) > 10
                 )
                 is_capital_paragraph_start = (is_first_word_capital and
-                                              (len(buffer) > 0 and buffer[-1][-1] in '.!?')  # previous sentence ended
+                                              (len(buffer) > 0 and word_count > 49 
+                                               and buffer[-1][-1] in '.!?')  # previous sentence ended
                 )
 
                 if is_indent_break and is_capital_paragraph_start: 
@@ -413,6 +433,7 @@ def extract_structure_from_pdf(pdf_path, output_image, output_json, log_path):
 
                         prev_section = current_section
                         prev_subsection = prev_subsection
+                        # print("Prev Word count:", prev_word_count)
                 else:
                     buffer.append(line_text)
 
